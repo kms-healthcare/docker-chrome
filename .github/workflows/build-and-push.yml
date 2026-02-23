@@ -1,0 +1,49 @@
+name: Build and Push Docker Chrome Image
+on:
+  workflow_dispatch:
+    inputs:
+      VERSION:
+        description: 'Image version tag (e.g. 1.0.0)'
+        required: true
+      CHROME_VERSION:
+        description: 'Chrome version to install (leave empty for latest)'
+        required: false
+        default: ''
+
+jobs:
+  docker-ci:
+    name: Build and Push
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.store_tag.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and Push Docker Image to Google Cloud Container Registry
+        uses: kms-healthcare/il-actions/gcr-build-push@main
+        with:
+          image-name: il-registry/docker-chrome
+          image-tag: ${{ github.event.inputs.VERSION }}
+          gcloud-project-id: ${{ secrets.GCLOUD_PROJECT_ID }}
+          gcloud-registry: ${{ secrets.GCLOUD_REGISTRY }}
+          gcloud-secrets: ${{ secrets.GCLOUD_SERVICE_KEY }}
+          dockerfile: ./Dockerfile
+          docker-context: .
+          docker-additionals: --build-arg VERSION=${{ github.event.inputs.VERSION }} --build-arg CHROME_VERSION=${{ github.event.inputs.CHROME_VERSION }}
+
+      - name: Store tag as job output
+        id: store_tag
+        run: echo "image_tag=${{ github.event.inputs.VERSION }}" >> "$GITHUB_OUTPUT"
+
+  manifest-ci:
+    runs-on: ubuntu-latest
+    needs: docker-ci
+    steps:
+      - name: Update ops manifest
+        uses: kms-healthcare/il-actions/update-image-tag@main
+        with:
+          repo: kms-healthcare/il-ops
+          github-token: ${{ secrets.PAT_TOKEN }}
+          values-file: 'charts/docker-chrome/values.dev.yaml'
+          xpath: .image.tag
+          tag: ${{ needs.docker-ci.outputs.image-tag }}
