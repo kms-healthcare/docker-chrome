@@ -25,6 +25,14 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 86400s;
         proxy_send_timeout 86400s;
+
+        # Chrome generates webSocketDebuggerUrl using the Host it received
+        # ("localhost"). Rewrite it back to the original client-facing host
+        # so Playwright/Puppeteer connect to the right address.
+        proxy_set_header Accept-Encoding "";
+        sub_filter '//localhost/' '//$http_host/';
+        sub_filter_once off;
+        sub_filter_types application/json;
     }
 }
 NGINX
