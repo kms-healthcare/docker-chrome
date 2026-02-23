@@ -32,7 +32,6 @@ RUN \
     google-chrome-stable=${CHROME_VERSION} && \
   apt-get install -y --no-install-recommends \
     vim net-tools && \
-  apt install libnginx-mod-stream && \
   echo "**** cleanup ****" && \
   apt-get autoclean && \
   rm -rf \
@@ -43,6 +42,7 @@ RUN \
 
 # add local files
 COPY /root /
+RUN chmod +x /custom-cont-init.d/99-chrome-proxy
 
 # ports and volumes
 EXPOSE 3000

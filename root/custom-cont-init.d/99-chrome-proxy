@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# Chrome DevTools rejects HTTP requests whose Host header is a non-IP hostname
+# (returns 500). When accessed via K8s service DNS, the Host header contains the
+# service FQDN, which Chrome rejects.
+#
+# Fix: inject an HTTP reverse proxy into the Selkies nginx that rewrites
+# Host to "localhost" before forwarding to Chrome on port 9222.
+
+PROXY_DIR="/etc/nginx/chrome-proxy.d"
+PROXY_CONF="${PROXY_DIR}/debug-proxy.conf"
+
+mkdir -p "${PROXY_DIR}"
+
+cat > "${PROXY_CONF}" << 'NGINX'
+server {
+    listen 3222;
+    listen [::]:3222;
+
+    location / {
+        proxy_pass http://127.0.0.1:9222;
+        proxy_set_header Host localhost;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+NGINX
+
+# Find the active nginx.conf and inject our include into the http block
+for conf in /config/nginx/nginx.conf /etc/nginx/nginx.conf; do
+    if [ -f "$conf" ]; then
+        if ! grep -q "chrome-proxy" "$conf"; then
+            sed -i '/http.*{/a\    include '"${PROXY_DIR}"'/*.conf;' "$conf"
+            echo "[chrome-proxy] Injected include into ${conf}"
+        else
+            echo "[chrome-proxy] ${conf} already configured"
+        fi
+        break
+    fi
+done
